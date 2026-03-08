@@ -12,4 +12,5 @@ public interface ResourceRepository extends JpaRepository<Resource, Long> {
     long countByUploadedBy(Long userId);
     Optional<Resource> findTopByOrderByRatingDesc();
     List<Resource> findTop10ByOrderByUploadDateDesc();
+    List<Resource> findAllByUploadedBy(Long uploadedBy);
 }

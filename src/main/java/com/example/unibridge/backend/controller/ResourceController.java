@@ -1,8 +1,11 @@
 package com.example.unibridge.backend.controller;
 
 import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -18,14 +21,16 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 import com.example.unibridge.backend.model.Resource;
 import com.example.unibridge.backend.repository.ResourceRepository;
 
 @RestController
 @RequestMapping("/api/resources")
-@CrossOrigin
+@CrossOrigin(origins = {"http://localhost:3000", "http://192.168.1.9:3000"})
 public class ResourceController {
 
     @Autowired
@@ -132,6 +137,10 @@ public Map<String, Object> getResourceById(@PathVariable Long id) {
 
     return resMap;
 }
+@GetMapping("/user/{userId}")
+    public List<Resource> getResourcesByUser(@PathVariable Long userId) {
+        return repo.findAllByUploadedBy(userId);
+    }
 @GetMapping("/files/{filename:.+}")
 public ResponseEntity<org.springframework.core.io.Resource> serveFile(@PathVariable String filename) {
     try {
@@ -156,10 +165,50 @@ public ResponseEntity<org.springframework.core.io.Resource> serveFile(@PathVaria
         return ResponseEntity.internalServerError().build();
     }
 }
+    // @PostMapping("/upload")
+    // public Resource upload(@RequestBody Resource resource) {
+    //     // Here you can also compute type and size if needed when saving
+    //     return repo.save(resource);
+    // }
     @PostMapping("/upload")
-    public Resource upload(@RequestBody Resource resource) {
-        // Here you can also compute type and size if needed when saving
-        return repo.save(resource);
+    public ResponseEntity<?> upload(
+            @RequestParam("file") MultipartFile file,
+            @RequestParam("title") String title,
+            @RequestParam("subject") String subject,
+            @RequestParam("category") String category,
+            @RequestParam("description") String description,
+            @RequestParam("uploadedBy") Long uploadedBy) {
+
+        try {
+            // 1. Ensure the directory exists
+            File directory = new File(FILE_BASE_PATH);
+            if (!directory.exists()) {
+                directory.mkdirs();
+            }
+
+            // 2. Save file to the Linux file system
+            String originalFileName = file.getOriginalFilename();
+            String uniqueFileName = System.currentTimeMillis() + "_" + originalFileName;
+            Path targetLocation = Paths.get(FILE_BASE_PATH).resolve(uniqueFileName);
+            
+            Files.copy(file.getInputStream(), targetLocation, StandardCopyOption.REPLACE_EXISTING);
+
+            // 3. Create Resource Object for DB
+            Resource resource = new Resource();
+            resource.setTitle(title);
+            resource.setSubject(subject);
+            resource.setCategory(category);
+            resource.setDescription(description);
+            resource.setUploadedBy(uploadedBy);
+            resource.setFilePath(uniqueFileName); // Store filename or full path string
+
+            // 4. Save to Repository
+            Resource savedResource = repo.save(resource);
+            return ResponseEntity.ok(savedResource);
+
+        } catch (IOException e) {
+            return ResponseEntity.status(500).body("Error: Could not save file. " + e.getMessage());
+        }
     }
     @GetMapping("/upload-count/{userId}")
 public long getUploadCount(@PathVariable Long userId){
